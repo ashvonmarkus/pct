@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import html
+import csv
 import json
 from pathlib import Path
 from google.oauth2.credentials import Credentials
@@ -56,6 +57,42 @@ def table_html(rows):
     return ''.join(out)
 
 
+def off_trail_miles() -> float | None:
+    """Tracked hiking miles minus latest projected PCT mile from check-ins."""
+    garmin_csv = BASE / 'data/pct_stats_miles.csv'
+    checkins_csv = BASE / 'pct_stats_checkins.csv'
+    if not garmin_csv.exists() or not checkins_csv.exists():
+        return None
+    tracked = 0.0
+    with garmin_csv.open(newline='') as f:
+        for row in csv.DictReader(f):
+            if row.get('type') != 'hiking':
+                continue
+            try:
+                tracked += float(row.get('miles') or 0)
+            except ValueError:
+                pass
+    try:
+        import update_checkins_with_pct_miles as pct
+        pts = pct.load_pct_points()
+        pct_miles = []
+        with checkins_csv.open(newline='') as f:
+            for row in csv.DictReader(f):
+                if not row.get('latitude') or not row.get('longitude'):
+                    continue
+                mile, _dist_m = pct.nearest_pct_mile(float(row['latitude']), float(row['longitude']), pts)
+                pct_miles.append(mile)
+        if not pct_miles:
+            return None
+        return max(0.0, tracked - max(pct_miles))
+    except Exception:
+        return None
+
+
+def fmt_de(value: float) -> str:
+    return f'{value:.2f}'.replace('.', ',')
+
+
 def main():
     service = build('sheets', 'v4', credentials=get_creds())
     dashboard = values(service, "'pct-dashboard'!A22:E80")
@@ -66,6 +103,8 @@ def main():
             del row[3]
     ramen = formatted(service, "'Ramen Index'!A1:C20")
     summary = formatted(service, "'Trackings'!A1:L5")
+    off_trail = off_trail_miles()
+    off_trail_html = '' if off_trail is None else f'<div class="metric"><b>Off Trail Miles getrackt</b>{fmt_de(off_trail)}</div>'
 
     chart_rows = []
     for row in dashboard[1:]:
@@ -145,7 +184,7 @@ def main():
     <section class="card">
       <h2>Zusammenfassung</h2>
       <div class="grid">
-        {''.join(f'<div class="metric"><b>{html.escape(str(row[i]))}</b>{html.escape(str(row[i+1]))}</div>' for row in summary[1:5] for i in range(0, min(len(row)-1, 12), 2) if row[i])}
+        {''.join(f'<div class="metric"><b>{html.escape(str(row[i]))}</b>{html.escape(str(row[i+1]))}</div>' for row in summary[1:5] for i in range(0, min(len(row)-1, 12), 2) if row[i])}{off_trail_html}
       </div>
     </section>
 
