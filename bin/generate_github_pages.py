@@ -133,7 +133,7 @@ def main():
     <div class="card">
       <h1>PCT Dashboard</h1>
       <p class="muted">Quelle: <a href="https://docs.google.com/spreadsheets/d/{SPREADSHEET_ID}" target="_blank" rel="noopener">Google Sheet</a></p>
-      <p class="muted">Aufrufe auf diesem Gerät: <span id="viewCounter">–</span></p>
+      <p class="muted">Aufrufe insgesamt: <img alt="Aufrufe insgesamt" src="https://hits.seeyoufarm.com/api/count/incr/badge.svg?url=https%3A%2F%2Fashvonmarkus.github.io%2Fpct%2F&count_bg=%2364748B&title_bg=%23CBD5E1&icon=&icon_color=%23E7E7E7&title=Aufrufe&edge_flat=false" style="vertical-align: middle; height: 20px;" /></p>
     </div>
 
     <section class="card chart-card">
@@ -161,11 +161,6 @@ def main():
   </main>
 
 <script>
-const viewCounterKey = 'pctDashboardViews';
-const viewCounter = Number.parseInt(localStorage.getItem(viewCounterKey) || '0', 10) + 1;
-localStorage.setItem(viewCounterKey, String(viewCounter));
-document.getElementById('viewCounter').textContent = viewCounter.toLocaleString('de-DE');
-
 const labels = {json.dumps(labels)};
 const daily = {json.dumps(daily)};
 const cumulative = {json.dumps(cumulative)};

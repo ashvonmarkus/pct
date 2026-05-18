@@ -40,7 +40,7 @@
     <div class="card">
       <h1>PCT Dashboard</h1>
       <p class="muted">Quelle: <a href="https://docs.google.com/spreadsheets/d/1YKmJ1GwR2ZOfQQzrWQtNQ3JALGDj4NsxiNL-s2Fq8KU" target="_blank" rel="noopener">Google Sheet</a></p>
-      <p class="muted">Aufrufe auf diesem Gerät: <span id="viewCounter">–</span></p>
+      <p class="muted">Aufrufe insgesamt: <img alt="Aufrufe insgesamt" src="https://hits.seeyoufarm.com/api/count/incr/badge.svg?url=https%3A%2F%2Fashvonmarkus.github.io%2Fpct%2F&count_bg=%2364748B&title_bg=%23CBD5E1&icon=&icon_color=%23E7E7E7&title=Aufrufe&edge_flat=false" style="vertical-align: middle; height: 20px;" /></p>
     </div>
 
     <section class="card chart-card">
@@ -68,11 +68,6 @@
   </main>
 
 <script>
-const viewCounterKey = 'pctDashboardViews';
-const viewCounter = Number.parseInt(localStorage.getItem(viewCounterKey) || '0', 10) + 1;
-localStorage.setItem(viewCounterKey, String(viewCounter));
-document.getElementById('viewCounter').textContent = viewCounter.toLocaleString('de-DE');
-
 const labels = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12];
 const daily = [16.16, 14.93, 16.17, 18.77, 14.49, 4.03, 7.83, 16.99, 16.02, 18.91, 19.98, 0.0];
 const cumulative = [16.16, 31.09, 47.26, 66.03, 80.52, 84.55, 92.38, 109.37, 125.39, 144.3, 164.28, 164.28];
