@@ -4,6 +4,7 @@ from __future__ import annotations
 import html
 import csv
 import json
+from datetime import date, datetime
 from pathlib import Path
 from google.oauth2.credentials import Credentials
 from google.auth.transport.requests import Request
@@ -13,6 +14,7 @@ BASE = Path('/home/pi/.openclaw/workspace')
 TOKEN_FILE = Path.home() / '.config/openclaw-secrets/google-token.json'
 SPREADSHEET_ID = '1YKmJ1GwR2ZOfQQzrWQtNQ3JALGDj4NsxiNL-s2Fq8KU'
 OUTPUT = BASE / 'index.html'
+PCT_START_DATE = date(2026, 5, 6)
 SCOPES = ['https://www.googleapis.com/auth/spreadsheets.readonly']
 
 
@@ -93,14 +95,67 @@ def fmt_de(value: float) -> str:
     return f'{value:.2f}'.replace('.', ',')
 
 
+def format_hhmm(minutes: float) -> str:
+    total = int(round(minutes))
+    return f'{total // 60:02d}:{total % 60:02d}'
+
+
+def activity_time_by_day() -> dict[int, str]:
+    garmin_csv = BASE / 'data/pct_stats_miles.csv'
+    if not garmin_csv.exists():
+        return {}
+    minutes_by_day: dict[int, float] = {}
+    with garmin_csv.open(newline='') as f:
+        for row in csv.DictReader(f):
+            if row.get('type') != 'hiking':
+                continue
+            try:
+                day = (datetime.strptime(row.get('date_local', ''), '%Y-%m-%d %H:%M:%S').date() - PCT_START_DATE).days + 1
+                if day < 1:
+                    continue
+                minutes_by_day[day] = minutes_by_day.get(day, 0.0) + float(row.get('duration_min') or 0)
+            except Exception:
+                continue
+    return {day: format_hhmm(minutes) for day, minutes in minutes_by_day.items()}
+
+
+def dashboard_table_rows(rows: list[list[str]], times_by_day: dict[int, str]) -> list[list[str]]:
+    if not rows:
+        return []
+    out = [[str(rows[0][0]), str(rows[0][1]), str(rows[0][2]), 'Zeit']]
+    for row in rows[1:]:
+        if len(row) < 3 or row[0] == '':
+            continue
+        try:
+            day = int(float(str(row[0]).replace(',', '.')))
+        except Exception:
+            day = None
+        out.append([str(row[0]), str(row[1]), str(row[2]), times_by_day.get(day, '')])
+    return out
+
+
+def summary_html(summary: list[list[str]], required_miles: float | None) -> str:
+    out = []
+    for row in summary[1:5]:
+        for i in range(0, min(len(row) - 1, 12), 2):
+            if not row[i]:
+                continue
+            label = str(row[i])
+            value = str(row[i + 1])
+            if required_miles is not None and label == 'benötigt mi/Tag':
+                value = fmt_de(required_miles)
+            elif required_miles is not None and label == 'benötigt km/Tag':
+                value = fmt_de(required_miles * 1.609344)
+            out.append(f'<div class="metric"><b>{html.escape(label)}</b>{html.escape(value)}</div>')
+    return ''.join(out)
+
+
 def main():
     service = build('sheets', 'v4', credentials=get_creds())
     dashboard = values(service, "'pct-dashboard'!A22:E80")
     dashboard_fmt = formatted(service, "'pct-dashboard'!A22:E80")
-    # In der Tabelle die Durchschnitts-Spalte ausblenden; sie steht bereits in der Zusammenfassung/Chart.
-    for row in dashboard_fmt:
-        if len(row) > 3:
-            del row[3]
+    # Unten nur Tageswerte plus Aktivitätszeit zeigen; Durchschnitte/Zieltempo stehen oben bzw. im Chart.
+    dashboard_fmt = dashboard_table_rows(dashboard_fmt, activity_time_by_day())
     ramen = formatted(service, "'Ramen Index'!A1:C20")
     summary = formatted(service, "'Trackings'!A1:L5")
     off_trail = off_trail_miles()
@@ -129,6 +184,8 @@ def main():
         cumulative.append(round(running, 2))
     avg = [r['avgMiles'] for r in chart_rows]
     required = [r['requiredMiles'] for r in chart_rows]
+    required_miles = required[0] if required else None
+    summary_cards = summary_html(summary, required_miles) + off_trail_html
 
     doc = f'''<!DOCTYPE html>
 <html lang="de">
@@ -172,7 +229,7 @@ def main():
     <div class="card">
       <h1>PCT Dashboard</h1>
       <p class="muted">Quelle: <a href="https://docs.google.com/spreadsheets/d/{SPREADSHEET_ID}" target="_blank" rel="noopener">Google Sheet</a></p>
-      <p class="muted">Aufrufe insgesamt: <img alt="Aufrufe insgesamt" src="https://hits.seeyoufarm.com/api/count/incr/badge.svg?url=https%3A%2F%2Fashvonmarkus.github.io%2Fpct%2F&count_bg=%2364748B&title_bg=%23CBD5E1&icon=&icon_color=%23E7E7E7&title=Aufrufe&edge_flat=false" style="vertical-align: middle; height: 20px;" /></p>
+      <p class="muted">Aufrufe insgesamt: <img alt="Aufrufe insgesamt" src="https://hits.sh/ashvonmarkus.github.io/pct.svg?label=Aufrufe&color=64748b&labelColor=cbd5e1" style="vertical-align: middle; height: 20px;" /></p>
     </div>
 
     <section class="card chart-card">
@@ -184,7 +241,7 @@ def main():
     <section class="card">
       <h2>Zusammenfassung</h2>
       <div class="grid">
-        {''.join(f'<div class="metric"><b>{html.escape(str(row[i]))}</b>{html.escape(str(row[i+1]))}</div>' for row in summary[1:5] for i in range(0, min(len(row)-1, 12), 2) if row[i])}{off_trail_html}
+        {summary_cards}
       </div>
     </section>
 
