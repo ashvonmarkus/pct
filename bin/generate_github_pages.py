@@ -257,7 +257,6 @@ def main():
   <main class="container">
     <div class="card">
       <h1>PCT Dashboard</h1>
-      <p class="muted">Quelle: <a href="https://docs.google.com/spreadsheets/d/{SPREADSHEET_ID}" target="_blank" rel="noopener">Google Sheet</a></p>
       <p class="muted">insgesamt: <img alt="Aufrufe insgesamt" src="https://hits.sh/ashvonmarkus.github.io/pct.svg?label=Aufrufe&color=64748b&labelColor=cbd5e1" style="vertical-align: middle; height: 20px;" /></p>
     </div>
 
