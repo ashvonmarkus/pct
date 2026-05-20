@@ -100,6 +100,25 @@ def format_hhmm(minutes: float) -> str:
     return f'{total // 60:02d}:{total % 60:02d}'
 
 
+
+def elevation_by_day() -> dict[int, float]:
+    garmin_csv = BASE / 'data/pct_stats_miles.csv'
+    if not garmin_csv.exists():
+        return {}
+    meters_by_day: dict[int, float] = {}
+    with garmin_csv.open(newline='') as f:
+        for row in csv.DictReader(f):
+            if row.get('type') != 'hiking':
+                continue
+            try:
+                day = (datetime.strptime(row.get('date_local', ''), '%Y-%m-%d %H:%M:%S').date() - PCT_START_DATE).days + 1
+                if day < 1:
+                    continue
+                meters_by_day[day] = meters_by_day.get(day, 0.0) + float(row.get('elevation_gain_m') or 0)
+            except Exception:
+                continue
+    return meters_by_day
+
 def activity_time_by_day() -> dict[int, str]:
     garmin_csv = BASE / 'data/pct_stats_miles.csv'
     if not garmin_csv.exists():
@@ -119,10 +138,10 @@ def activity_time_by_day() -> dict[int, str]:
     return {day: format_hhmm(minutes) for day, minutes in minutes_by_day.items()}
 
 
-def dashboard_table_rows(rows: list[list[str]], times_by_day: dict[int, str]) -> list[list[str]]:
+def dashboard_table_rows(rows: list[list[str]], times_by_day: dict[int, str], elevation_by_day_m: dict[int, float]) -> list[list[str]]:
     if not rows:
         return []
-    out = [[str(rows[0][0]), str(rows[0][1]), str(rows[0][2]), 'Zeit']]
+    out = [[str(rows[0][0]), str(rows[0][1]), str(rows[0][2]), 'Höhenmeter', 'Zeit']]
     for row in rows[1:]:
         if len(row) < 3 or row[0] == '':
             continue
@@ -130,7 +149,7 @@ def dashboard_table_rows(rows: list[list[str]], times_by_day: dict[int, str]) ->
             day = int(float(str(row[0]).replace(',', '.')))
         except Exception:
             day = None
-        out.append([str(row[0]), str(row[1]), str(row[2]), times_by_day.get(day, '')])
+        out.append([str(row[0]), str(row[1]), str(row[2]), fmt_de(elevation_by_day_m.get(day, 0.0)).rstrip('0').rstrip(','), times_by_day.get(day, '')])
     return out
 
 
@@ -155,11 +174,21 @@ def main():
     dashboard = values(service, "'pct-dashboard'!A22:E80")
     dashboard_fmt = formatted(service, "'pct-dashboard'!A22:E80")
     # Unten nur Tageswerte plus Aktivitätszeit zeigen; Durchschnitte/Zieltempo stehen oben bzw. im Chart.
-    dashboard_fmt = dashboard_table_rows(dashboard_fmt, activity_time_by_day())
+    elevation_daily = elevation_by_day()
+    dashboard_fmt = dashboard_table_rows(dashboard_fmt, activity_time_by_day(), elevation_daily)
     ramen = formatted(service, "'Ramen Index'!A1:C20")
     summary = formatted(service, "'Trackings'!A1:L5")
     off_trail = off_trail_miles()
+    elevation_total = sum(elevation_daily.values())
+    elevation_avg = elevation_total / len(elevation_daily) if elevation_daily else 0.0
     off_trail_html = '' if off_trail is None else f'<div class="metric"><b>Off Trail Miles getrackt</b>{fmt_de(off_trail)}</div>'
+    elevation_overview_html = f'''<section class="card">
+      <h2>Höhenmeter Übersicht</h2>
+      <div class="grid">
+        <div class="metric"><b>Gesamthöhenmeter</b>{fmt_de(elevation_total).rstrip('0').rstrip(',')} m</div>
+        <div class="metric"><b>Ø Höhenmeter pro Aktivitätstag</b>{fmt_de(elevation_avg).rstrip('0').rstrip(',')} m</div>
+      </div>
+    </section>'''
 
     chart_rows = []
     for row in dashboard[1:]:
@@ -229,7 +258,7 @@ def main():
     <div class="card">
       <h1>PCT Dashboard</h1>
       <p class="muted">Quelle: <a href="https://docs.google.com/spreadsheets/d/{SPREADSHEET_ID}" target="_blank" rel="noopener">Google Sheet</a></p>
-      <p class="muted">Aufrufe insgesamt: <img alt="Aufrufe insgesamt" src="https://hits.sh/ashvonmarkus.github.io/pct.svg?label=Aufrufe&color=64748b&labelColor=cbd5e1" style="vertical-align: middle; height: 20px;" /></p>
+      <p class="muted">insgesamt: <img alt="Aufrufe insgesamt" src="https://hits.sh/ashvonmarkus.github.io/pct.svg?label=Aufrufe&color=64748b&labelColor=cbd5e1" style="vertical-align: middle; height: 20px;" /></p>
     </div>
 
     <section class="card chart-card">
@@ -244,6 +273,8 @@ def main():
         {summary_cards}
       </div>
     </section>
+
+    {elevation_overview_html}
 
     <section class="card scroll">
       <h2>pct-dashboard</h2>
