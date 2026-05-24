@@ -15,6 +15,7 @@ TOKEN_FILE = Path.home() / '.config/openclaw-secrets/google-token.json'
 SPREADSHEET_ID = '1YKmJ1GwR2ZOfQQzrWQtNQ3JALGDj4NsxiNL-s2Fq8KU'
 OUTPUT = BASE / 'index.html'
 PCT_START_DATE = date(2026, 5, 6)
+PCT_TOTAL_MILES = 2650.0
 SCOPES = ['https://www.googleapis.com/auth/spreadsheets.readonly']
 
 
@@ -93,6 +94,25 @@ def off_trail_miles() -> float | None:
 
 def fmt_de(value: float) -> str:
     return f'{value:.2f}'.replace('.', ',')
+
+
+def trail_progress() -> tuple[float, float] | None:
+    """Return latest/max projected PCT mile and percent completed."""
+    checkins_csv = BASE / 'pct_stats_checkins.csv'
+    if not checkins_csv.exists():
+        return None
+    miles = []
+    with checkins_csv.open(newline='') as f:
+        for row in csv.DictReader(f):
+            try:
+                if row.get('pct_mile'):
+                    miles.append(float(row['pct_mile']))
+            except ValueError:
+                continue
+    if not miles:
+        return None
+    marker = max(miles)
+    return marker, min(100.0, max(0.0, marker / PCT_TOTAL_MILES * 100))
 
 
 def format_hhmm(minutes: float) -> str:
@@ -179,6 +199,15 @@ def main():
     ramen = formatted(service, "'Ramen Index'!A1:C20")
     summary = formatted(service, "'Trackings'!A1:L5")
     off_trail = off_trail_miles()
+    progress = trail_progress()
+    if progress:
+        marker, percent = progress
+        progress_html = f'''<div class="progress-block">
+        <div class="progress-row"><b>PCT Fortschritt</b><span>{fmt_de(marker)} mi / {fmt_de(PCT_TOTAL_MILES)} mi · {fmt_de(percent)}%</span></div>
+        <div class="progress-track"><div class="progress-fill" style="width: {percent:.2f}%"></div></div>
+      </div>'''
+    else:
+        progress_html = ''
     elevation_total = sum(elevation_daily.values())
     elevation_avg = elevation_total / len(elevation_daily) if elevation_daily else 0.0
     off_trail_html = '' if off_trail is None else f'<div class="metric"><b>Off Trail Miles getrackt</b>{fmt_de(off_trail)}</div>'
@@ -240,6 +269,11 @@ def main():
     .scroll {{ overflow-x:auto; }}
     .chart-card {{ padding: 14px 10px 16px; }}
     .chart-wrap {{ position: relative; height: min(72vh, 520px); min-height: 360px; }}
+    .progress-block {{ margin: 14px 6px 2px; padding: 12px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; }}
+    .progress-row {{ display: flex; justify-content: space-between; gap: 12px; align-items: baseline; color: #334155; }}
+    .progress-row span {{ color: #64748b; font-variant-numeric: tabular-nums; }}
+    .progress-track {{ height: 16px; margin-top: 10px; background: #e2e8f0; border-radius: 999px; overflow: hidden; }}
+    .progress-fill {{ height: 100%; background: linear-gradient(90deg, #2563eb, #16a34a); border-radius: inherit; }}
     canvas {{ width: 100% !important; height: 100% !important; }}
     @media (max-width: 640px) {{
       h1 {{ font-size: 1.35rem; }}
@@ -264,6 +298,7 @@ def main():
       <h2>Meilen pro PCT-Tag</h2>
       <p class="muted">Tagesmeilen als Balken, kumulierte Meilen als Linie rechts.</p>
       <div class="chart-wrap"><canvas id="pctChart"></canvas></div>
+      {progress_html}
     </section>
 
     <section class="card">
