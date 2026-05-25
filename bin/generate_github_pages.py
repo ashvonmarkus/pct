@@ -60,6 +60,30 @@ def table_html(rows):
     return ''.join(out)
 
 
+def pct_dashboard_table_html(rows):
+    if not rows:
+        return '<p>No data.</p>'
+    header, body = rows[0], rows[1:]
+    out = ['<table><thead><tr>']
+    out.extend(f'<th>{html.escape(str(c))}</th>' for c in header)
+    out.append('</tr></thead><tbody>')
+    for row in body:
+        tr_class = ''
+        if len(row) > 1:
+            try:
+                miles = float(str(row[1]).replace(',', '.'))
+                if miles == 0:
+                    tr_class = ' class="zero-miles"'
+            except ValueError:
+                pass
+        out.append(f'<tr{tr_class}>')
+        for i in range(len(header)):
+            out.append(f'<td>{html.escape(str(row[i])) if i < len(row) else ""}</td>')
+        out.append('</tr>')
+    out.append('</tbody></table>')
+    return ''.join(out)
+
+
 def off_trail_miles() -> float | None:
     """Tracked hiking miles minus latest projected PCT mile from check-ins."""
     garmin_csv = BASE / 'data/pct_stats_miles.csv'
@@ -274,6 +298,7 @@ def main():
     .progress-row span {{ color: #64748b; font-variant-numeric: tabular-nums; }}
     .progress-track {{ height: 16px; margin-top: 10px; background: #e2e8f0; border-radius: 999px; overflow: hidden; }}
     .progress-fill {{ height: 100%; background: linear-gradient(90deg, #2563eb, #16a34a); border-radius: inherit; }}
+    .zero-miles {{ background-color: #ffe0b2; }}
     canvas {{ width: 100% !important; height: 100% !important; }}
     @media (max-width: 640px) {{
       h1 {{ font-size: 1.35rem; }}
@@ -312,7 +337,7 @@ def main():
 
     <section class="card scroll">
       <h2>pct-dashboard</h2>
-      {table_html(dashboard_fmt)}
+      {pct_dashboard_table_html(dashboard_fmt)}
     </section>
 
     <section class="card scroll">
