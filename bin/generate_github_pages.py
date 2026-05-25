@@ -16,7 +16,7 @@ SPREADSHEET_ID = '1YKmJ1GwR2ZOfQQzrWQtNQ3JALGDj4NsxiNL-s2Fq8KU'
 OUTPUT = BASE / 'index.html'
 PCT_START_DATE = date(2026, 5, 6)
 PCT_TOTAL_MILES = 2650.0
-SCOPES = ['https://www.googleapis.com/auth/spreadsheets.readonly']
+SCOPES = ['https://www.googleapis.com/auth/spreadsheets']
 
 
 def get_creds():
@@ -220,7 +220,7 @@ def main():
     # Unten nur Tageswerte plus Aktivitätszeit zeigen; Durchschnitte/Zieltempo stehen oben bzw. im Chart.
     elevation_daily = elevation_by_day()
     dashboard_fmt = dashboard_table_rows(dashboard_fmt, activity_time_by_day(), elevation_daily)
-    ramen = formatted(service, "'Ramen Index'!A1:C20")
+    ramen = formatted(service, "'Ramen Index'!A1:B20")
     summary = formatted(service, "'Trackings'!A1:L5")
     off_trail = off_trail_miles()
     progress = trail_progress()
