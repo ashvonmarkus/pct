@@ -354,12 +354,12 @@ def main():
       </div>
     </details>
 
-    {elevation_overview_html}
-
     <details class="card scroll">
-      <summary><h2>pct-dashboard</h2></summary>
+      <summary><h2>Getrackte Wanderungen</h2></summary>
       {pct_dashboard_table_html(dashboard_fmt)}
     </details>
+
+    {elevation_overview_html}
 
     <details class="card scroll">
       <summary><h2>Ramen Index</h2></summary>
