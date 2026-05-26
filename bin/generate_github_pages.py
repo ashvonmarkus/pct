@@ -134,6 +134,21 @@ def trail_progress() -> tuple[float, float] | None:
             except ValueError:
                 continue
     if not miles:
+        # Fallback: older/local CSV exports may not have pct_mile columns yet.
+        # Project the inReach coordinates directly so the website progress bar
+        # does not disappear between sync steps.
+        try:
+            import update_checkins_with_pct_miles as pct
+            pts = pct.load_pct_points()
+            with checkins_csv.open(newline='') as f:
+                for row in csv.DictReader(f):
+                    if not row.get('latitude') or not row.get('longitude'):
+                        continue
+                    mile, _dist_m = pct.nearest_pct_mile(float(row['latitude']), float(row['longitude']), pts)
+                    miles.append(mile)
+        except Exception:
+            pass
+    if not miles:
         return None
     marker = max(miles)
     return marker, min(100.0, max(0.0, marker / PCT_TOTAL_MILES * 100))
@@ -235,13 +250,13 @@ def main():
     elevation_total = sum(elevation_daily.values())
     elevation_avg = elevation_total / len(elevation_daily) if elevation_daily else 0.0
     off_trail_html = '' if off_trail is None else f'<div class="metric"><b>Off Trail Miles getrackt</b>{fmt_de(off_trail)}</div>'
-    elevation_overview_html = f'''<section class="card">
-      <h2>Höhenmeter Übersicht</h2>
+    elevation_overview_html = f'''<details class="card">
+      <summary><h2>Höhenmeter Übersicht</h2></summary>
       <div class="grid">
         <div class="metric"><b>Gesamthöhenmeter</b>{fmt_de(elevation_total).rstrip('0').rstrip(',')} m</div>
         <div class="metric"><b>Ø Höhenmeter pro Aktivitätstag</b>{fmt_de(elevation_avg).rstrip('0').rstrip(',')} m</div>
       </div>
-    </section>'''
+    </details>'''
 
     chart_rows = []
     for row in dashboard[1:]:
@@ -281,6 +296,12 @@ def main():
     body {{ font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif; margin: 0; background: #f5f7fb; color: #1f2937; }}
     .container {{ max-width: 1180px; margin: 0 auto; padding: 14px; }}
     .card {{ background: #fff; border-radius: 16px; padding: 16px; margin: 0 0 16px; box-shadow: 0 8px 28px rgba(15,23,42,.08); }}
+    details.card summary {{ list-style: none; cursor: pointer; display: flex; align-items: center; justify-content: space-between; gap: 12px; }}
+    details.card summary::-webkit-details-marker {{ display: none; }}
+    details.card summary h2 {{ margin: 0; }}
+    details.card summary::after {{ content: '▾'; color: #64748b; font-size: 1.1rem; transition: transform .18s ease; }}
+    details.card:not([open]) summary::after {{ transform: rotate(-90deg); }}
+    details.card[open] summary {{ margin-bottom: 14px; }}
     h1 {{ margin: 0 0 6px; }}
     h2 {{ margin: 0 0 14px; }}
     .muted {{ color: #64748b; }}
@@ -317,33 +338,33 @@ def main():
     <div class="card">
       <h1>PCT Dashboard</h1>
       <p class="muted">insgesamt: <img alt="Aufrufe insgesamt" src="https://hits.sh/ashvonmarkus.github.io/pct.svg?label=Aufrufe&color=64748b&labelColor=cbd5e1" style="vertical-align: middle; height: 20px;" /></p>
+      {progress_html}
     </div>
 
-    <section class="card chart-card">
-      <h2>Meilen pro PCT-Tag</h2>
+    <details class="card chart-card" open>
+      <summary><h2>Meilen pro PCT-Tag</h2></summary>
       <p class="muted">Tagesmeilen als Balken, kumulierte Meilen als Linie rechts.</p>
       <div class="chart-wrap"><canvas id="pctChart"></canvas></div>
-      {progress_html}
-    </section>
+    </details>
 
-    <section class="card">
-      <h2>Zusammenfassung</h2>
+    <details class="card" open>
+      <summary><h2>Zusammenfassung</h2></summary>
       <div class="grid">
         {summary_cards}
       </div>
-    </section>
+    </details>
 
     {elevation_overview_html}
 
-    <section class="card scroll">
-      <h2>pct-dashboard</h2>
+    <details class="card scroll">
+      <summary><h2>pct-dashboard</h2></summary>
       {pct_dashboard_table_html(dashboard_fmt)}
-    </section>
+    </details>
 
-    <section class="card scroll">
-      <h2>Ramen Index</h2>
+    <details class="card scroll">
+      <summary><h2>Ramen Index</h2></summary>
       {table_html(ramen)}
-    </section>
+    </details>
   </main>
 
 <script>
