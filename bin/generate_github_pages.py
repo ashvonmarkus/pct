@@ -4,7 +4,7 @@ from __future__ import annotations
 import html
 import csv
 import json
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 from pathlib import Path
 from google.oauth2.credentials import Credentials
 from google.auth.transport.requests import Request
@@ -197,10 +197,10 @@ def activity_time_by_day() -> dict[int, str]:
     return {day: format_hhmm(minutes) for day, minutes in minutes_by_day.items()}
 
 
-def dashboard_table_rows(rows: list[list[str]], times_by_day: dict[int, str], elevation_by_day_m: dict[int, float]) -> list[list[str]]:
+def dashboard_table_rows(rows: list[list[str]], elevation_by_day_m: dict[int, float]) -> list[list[str]]:
     if not rows:
         return []
-    out = [[str(rows[0][0]), str(rows[0][1]), str(rows[0][2]), 'Höhenmeter', 'Zeit']]
+    out = [[str(rows[0][0]), str(rows[0][1]), str(rows[0][2]), 'Höhenmeter']]
     for row in rows[1:]:
         if len(row) < 3 or row[0] == '':
             continue
@@ -208,7 +208,7 @@ def dashboard_table_rows(rows: list[list[str]], times_by_day: dict[int, str], el
             day = int(float(str(row[0]).replace(',', '.')))
         except Exception:
             day = None
-        out.append([str(row[0]), str(row[1]), str(row[2]), fmt_de(elevation_by_day_m.get(day, 0.0)).rstrip('0').rstrip(','), times_by_day.get(day, '')])
+        out.append([str(row[0]), str(row[1]), str(row[2]), fmt_de(elevation_by_day_m.get(day, 0.0)).rstrip('0').rstrip(',')])
     return out
 
 
@@ -230,11 +230,12 @@ def summary_html(summary: list[list[str]], required_miles: float | None) -> str:
 
 def main():
     service = build('sheets', 'v4', credentials=get_creds())
+    last_updated = datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S UTC')
     dashboard = values(service, "'pct-dashboard'!A22:E80")
     dashboard_fmt = formatted(service, "'pct-dashboard'!A22:E80")
     # Unten nur Tageswerte plus Aktivitätszeit zeigen; Durchschnitte/Zieltempo stehen oben bzw. im Chart.
     elevation_daily = elevation_by_day()
-    dashboard_fmt = dashboard_table_rows(dashboard_fmt, activity_time_by_day(), elevation_daily)
+    dashboard_fmt = dashboard_table_rows(dashboard_fmt, elevation_daily)
     ramen = formatted(service, "'Ramen Index'!A1:B20")
     summary = formatted(service, "'Trackings'!A1:L5")
     off_trail = off_trail_miles()
@@ -336,7 +337,7 @@ def main():
 <body>
   <main class="container">
     <div class="card">
-      <h1>PCT Dashboard</h1>
+      <p class="muted">Letzte Aktualisierung: {last_updated}</p>
       <p class="muted">insgesamt: <img alt="Aufrufe insgesamt" src="https://hits.sh/ashvonmarkus.github.io/pct.svg?label=Aufrufe&color=64748b&labelColor=cbd5e1" style="vertical-align: middle; height: 20px;" /></p>
       {progress_html}
     </div>
