@@ -212,6 +212,33 @@ def dashboard_table_rows(rows: list[list[str]], elevation_by_day_m: dict[int, fl
     return out
 
 
+def trim_trailing_zero_days(rows: list[list]) -> list[list]:
+    """Keep real/rest days, but remove empty zero-mile days after the last activity.
+
+    The dashboard sheet may contain formula rows up to "today". If Garmin has
+    not synced a hike for the latest day yet, those rows evaluate to 0 and make
+    the website look like the day/mileage data shifted. Zero-mile rest days in
+    the middle are preserved; only the run of zero rows at the end is removed.
+    """
+    if len(rows) <= 1:
+        return rows
+    header, body = rows[0], list(rows[1:])
+    while body:
+        row = body[-1]
+        if len(row) < 2 or row[0] == '':
+            body.pop()
+            continue
+        try:
+            miles = float(str(row[1] or 0).replace(',', '.'))
+        except Exception:
+            break
+        if miles == 0:
+            body.pop()
+            continue
+        break
+    return [header] + body
+
+
 def summary_html(summary: list[list[str]], required_miles: float | None) -> str:
     out = []
     for row in summary[1:5]:
@@ -228,14 +255,72 @@ def summary_html(summary: list[list[str]], required_miles: float | None) -> str:
     return ''.join(out)
 
 
+def compute_section_stats(labels, daily):
+    """Compute average miles per PCT section (desert <=44, sierra >44)."""
+    desert_miles = 0.0
+    desert_days = 0
+    sierra_miles = 0.0
+    sierra_days = 0
+    for day, miles in zip(labels, daily):
+        try:
+            d = int(day)
+            m = float(miles)
+        except Exception:
+            continue
+        if d <= 44:
+            if m > 0:
+                desert_miles += m
+                desert_days += 1
+        else:
+            if m > 0:
+                sierra_miles += m
+                sierra_days += 1
+    desert_avg = desert_miles / desert_days if desert_days else 0.0
+    sierra_avg = sierra_miles / sierra_days if sierra_days else 0.0
+    return {
+        'desert': {'total_miles': desert_miles, 'days': desert_days, 'avg': desert_avg},
+        'sierra': {'total_miles': sierra_miles, 'days': sierra_days, 'avg': sierra_avg}
+    }
+
+def section_bg_color(latest_day):
+    """Return a very transparent background color for chart based on latest day."""
+    if latest_day <= 44:
+        # desert tint: light brown
+        return 'rgba(210,180,140,0.05)'
+    else:
+        # mountain tint: light blue
+        return 'rgba(100,148,237,0.05)'
+
+def section_stats_html(stats):
+    """Generate HTML collapsible section for PCT sections."""
+    out = ['<details class="card">']
+    out.append('<summary><h2>Abschnitte</h2></summary>')
+    out.append('<div class="grid">')
+    for name, data in stats.items():
+        name_display = 'Wüste' if name == 'desert' else 'Sierra'
+        out.append(f'<div class="metric"><b>{name_display}</b>')
+        out.append(f'<div>Ø {fmt_de(data["avg"])} mi/Tag</div>')
+        out.append(f'<div>Gesammeilen: {fmt_de(data["total_miles"])}</div>')
+        out.append(f'<div>Tage mit Daten: {data["days"]}</div>')
+        out.append('</div>')
+    out.append('</div>')
+    out.append('</details>')
+    return ''.join(out)
+
+
 def main():
     service = build('sheets', 'v4', credentials=get_creds())
     last_updated = datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S UTC')
-    dashboard = values(service, "'pct-dashboard'!A22:E80")
-    dashboard_fmt = formatted(service, "'pct-dashboard'!A22:E80")
+    dashboard = trim_trailing_zero_days(values(service, "'pct-dashboard'!A22:E200"))
+    dashboard_fmt = trim_trailing_zero_days(formatted(service, "'pct-dashboard'!A22:E200"))
     # Unten nur Tageswerte plus Aktivitätszeit zeigen; Durchschnitte/Zieltempo stehen oben bzw. im Chart.
     elevation_daily = elevation_by_day()
     dashboard_fmt = dashboard_table_rows(dashboard_fmt, elevation_daily)
+    # Reverse rows for table (newest day on top) while keeping header
+    if len(dashboard_fmt) > 1:
+        table_rows = [dashboard_fmt[0]] + list(reversed(dashboard_fmt[1:]))
+    else:
+        table_rows = dashboard_fmt
     ramen = formatted(service, "'Ramen Index'!A1:B20")
     summary = formatted(service, "'Trackings'!A1:L5")
     off_trail = off_trail_miles()
@@ -356,8 +441,8 @@ def main():
     </details>
 
     <details class="card scroll">
-      <summary><h2>Getrackte Wanderungen</h2></summary>
-      {pct_dashboard_table_html(dashboard_fmt)}
+      <summary><h2>PCT-Tage aus Garmin</h2></summary>
+      {pct_dashboard_table_html(table_rows)}
     </details>
 
     {elevation_overview_html}
